@@ -72,28 +72,7 @@ Design decisions and current limitations
 - Team lookup: the `?managerId=` filter returns direct reports. Recursive/indirect-report traversal is not implemented yet — TODO.
 - OCR: receipt OCR is not implemented in this repository. The `receipts` table has an `ocrProcessedData` JSON column where parsed data could be stored.
 
-How the Approvals page works
-----------------------------
-- The manager approvals page fetches `/api/me` for the current user, loads company expenses from `/api/expenses`, then queries `/api/approvals?approverId=` to determine which expenses the approver may act on. The UI shows action buttons (Approve / Reject / Escalate) only for expenses the approver is authorized to handle. Once an action is taken the row becomes readonly locally.
-
-Development tips
-----------------
-- If you don't have a full auth setup locally: set `localStorage.userId` in the browser console to emulate login.
-- To inspect receipts, check `public/uploads` after a successful upload.
-- Use the `src/db/schema.ts` to understand the Drizzle ORM types and relations when writing queries.
-
-Testing & linting
------------------
-- Run linter / type checks via your workspace scripts (if configured):
-
-```bash
-pnpm lint
-pnpm build
-```
-
-If you add tests, prefer Vitest or Jest and place tests under `tests/`.
-
-Next steps (recommended)
+Next Steps
 ------------------------
 1. Inline receipts in the manager approvals table + a modal to view them (uses `/api/expenses/[id]`).
 2. Move currency conversion into the server `POST /api/expenses` so `baseCurrencyAmount` is computed server-side and persisted.
@@ -102,3 +81,38 @@ Next steps (recommended)
 5. Add unit/integration tests for approval logic (manager-first, percentage rules, specific approver, escalation).
 
 If you'd like, I can implement one of the recommended next steps for you. Pick one and I'll start working on it and update the todo list accordingly.
+
+Tech stack & Docker
+--------------------
+This project is built with a modern full-stack stack. Key technologies used:
+
+- Next.js (App Router) — React-based framework used for frontend pages and server routes under `app/api/*`.
+- shadcn/ui — component library and design primitives (Radix + Tailwind CSS) used for UI building blocks (tables, dialogs, buttons, etc.).
+- Drizzle ORM — typed ORM for PostgreSQL; schema is defined in `src/db/schema.ts` and used by API routes.
+- PostgreSQL — production-grade relational database used for companies, users, expenses, receipts, approval flows, and approvals.
+- Docker & Docker Compose — the repository includes `docker-compose.yml` for running Postgres and the app together during development or CI.
+
+Quick Docker usage
+------------------
+1. Create a `.env` file at the project root and set at minimum a `DATABASE_URL` pointing at Postgres. Example:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@db:5432/amalthea
+```
+
+2. Start services with Docker Compose (this will build the app and start Postgres):
+
+```bash
+docker compose up --build
+```
+
+3. When running in Docker Compose, the web app will try to read `DATABASE_URL` from the environment. You can connect to the database from the host using a local psql client if you expose ports in `docker-compose.yml`.
+
+Notes on environment and deployment
+----------------------------------
+- Ensure `DATABASE_URL` and any other secrets are set in the environment for production deployments (e.g., Vercel environment variables or your deployment platform).
+- The codebase expects Tailwind CSS and shadcn primitives; the Next.js build will include those as part of `pnpm build` or Docker image build.
+
+If you'd like, I can add a minimal `docker-compose.override.yml` or a short `Makefile` to simplify common commands (build, up, down, db shell)."
+
+Crafted with ❤️ By Ayush Singh.
