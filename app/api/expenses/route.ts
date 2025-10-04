@@ -46,10 +46,58 @@ export async function POST(request: Request) {
 			}
 		}
 
-		return new Response(JSON.stringify({ id: newExp.id }), { status: 201 })
+	return new Response(JSON.stringify({ id: newExp.id }), { status: 201, headers: { 'Content-Type': 'application/json' } })
 	} catch (err) {
 		console.error('Error creating expense', err)
 		return new Response('Internal Server Error', { status: 500 })
 	}
+}
+
+export async function GET(request: Request) {
+	try {
+		const url = new URL(request.url)
+		const userId = url.searchParams.get('userId')
+		const managerId = url.searchParams.get('managerId')
+
+		const { db } = await import('@/src')
+		const { expenses } = await import('@/src/db/schema')
+
+		if (userId) {
+			const rows = await db.select().from(expenses).where((await import('drizzle-orm')).eq(expenses.userId, userId)).orderBy(expenses.expenseDate)
+			return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } })
+		}
+
+		// Support managerId to fetch direct reports' expenses server-side (better than client-side filtering)
+		if (managerId) {
+			const { users } = await import('@/src/db/schema')
+			const { inArray, eq } = await import('drizzle-orm')
+			// find direct reports
+			const reportRows = await db.select().from(users).where(eq(users.managerId, managerId))
+			if (!reportRows || reportRows.length === 0) {
+				return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+			}
+			const reportIds = reportRows.map(r => r.id)
+			const rows = await db.select().from(expenses).where(inArray(expenses.userId, reportIds)).orderBy(expenses.expenseDate)
+			return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } })
+		}
+
+		const rows = await db.select().from(expenses).orderBy(expenses.expenseDate)
+		return new Response(JSON.stringify(rows), { status: 200, headers: { 'Content-Type': 'application/json' } })
+	} catch (err) {
+		console.error('Error fetching expenses', err)
+		return new Response('Internal Server Error', { status: 500 })
+	}
+}
+
+export async function OPTIONS() {
+	// allow CORS preflight if needed and advertise allowed methods
+	return new Response(null, {
+		status: 204,
+		headers: {
+			'Allow': 'GET,POST,OPTIONS',
+			'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+			'Access-Control-Allow-Headers': 'Content-Type',
+		},
+	})
 }
 

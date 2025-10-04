@@ -44,18 +44,12 @@ export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
     useEffect(() => {
         if (state.status === 'success') {
             toast.success(state.message)
-            // Only close if dialog is currently open to avoid unnecessary state churn
-            setOpen((prev) => {
-                if (prev) {
-                    return false
-                }
-                return prev
-            })
+            // Close the dialog after success
+            setOpen(false)
 
-            // Reset form
-            const form = document.getElementById('add-user-form') as HTMLFormElement
-            // reset after a tick to avoid interfering with action state updates
-            setTimeout(() => form?.reset(), 0)
+            // Reset form only if it exists
+            const form = document.getElementById('add-user-form') as HTMLFormElement | null
+            if (form) setTimeout(() => form.reset(), 0)
 
             // Trigger table refresh
             onUserAdded?.()

@@ -18,8 +18,8 @@ import {
 
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "User",
+    email: "user@gmail.com",
     avatar: "/placeholder.jpg",
   }
 }
@@ -86,6 +86,9 @@ export function AppSidebar({ role, ...props }: { role?: string } & React.Compone
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <a href="/dashboard/expenses/new">Submit Expense</a>
+                </SidebarMenuButton>
+                <SidebarMenuButton asChild>
+                  <a href="/dashboard/expenses/my-expenses">My Expenses - History</a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

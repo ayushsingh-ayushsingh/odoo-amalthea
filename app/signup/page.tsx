@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
     Select,
     SelectTrigger,
@@ -66,6 +66,7 @@ export function SignupForm({
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [formState, setFormState] = useState<ActionState>({ status: 'idle', message: '' });
+    const [fetchedCountries, setFetchedCountries] = useState<{ country: string, currency_code: string }[] | null>(null)
 
 
     const form = useForm<SignupFormValues>({
@@ -124,6 +125,29 @@ export function SignupForm({
         }
     }
 
+    useEffect(() => {
+        // Try to fetch countries & currencies from restcountries as primary source.
+        // Fall back to bundled countryData if fetch fails.
+        let mounted = true
+        ;(async () => {
+            try {
+                const res = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies')
+                if (!res.ok) return
+                const json = await res.json()
+                const mapped = json.map((c: any) => {
+                    const country = c?.name?.common || ''
+                    const currencyObj = c?.currencies || {}
+                    const currency_code = Object.keys(currencyObj || {})[0] || ''
+                    return { country, currency_code }
+                }).filter((r: any) => r.country && r.currency_code)
+                if (mounted && mapped.length) setFetchedCountries(mapped)
+            } catch (e) {
+                // ignore and fallback to local data
+            }
+        })()
+        return () => { mounted = false }
+    }, [])
+
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card className="overflow-hidden p-0">
@@ -133,6 +157,7 @@ export function SignupForm({
                             form={form}
                             onSubmit={onSubmit}
                             isLoading={isLoading}
+                            fetchedCountries={fetchedCountries}
                         />
                     </div>
                     <div className="bg-muted relative hidden md:block">
@@ -166,9 +191,10 @@ type CompanySignupFormProps = {
     form: ReturnType<typeof useForm<SignupFormValues>>;
     onSubmit: (values: SignupFormValues) => Promise<void>;
     isLoading: boolean;
+    fetchedCountries?: { country: string, currency_code: string }[] | null
 };
 
-export function CompanySignupForm({ form, onSubmit, isLoading }: CompanySignupFormProps) {
+export function CompanySignupForm({ form, onSubmit, isLoading, fetchedCountries }: CompanySignupFormProps) {
 
     return (
         <Form {...form}>
@@ -256,12 +282,12 @@ export function CompanySignupForm({ form, onSubmit, isLoading }: CompanySignupFo
                                             <SelectValue placeholder="Select Country (sets base currency)" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {countryData.map(({ country, currency_code }) => (
+                                            {((fetchedCountries as { country: string, currency_code: string }[] | null) || countryData).map((c) => (
                                                 <SelectItem
-                                                    key={`${country}-${currency_code}`}
-                                                    value={`${country}-${currency_code}`}
+                                                    key={`${c.country}-${c.currency_code}`}
+                                                    value={`${c.country}-${c.currency_code}`}
                                                 >
-                                                    {`${country} (${currency_code})`}
+                                                    {`${c.country} (${c.currency_code})`}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
