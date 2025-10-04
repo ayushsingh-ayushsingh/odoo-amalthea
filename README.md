@@ -1,4 +1,4 @@
-Project: Expense Management (Odoo Amalthea)
+# Project: Expense Management (Odoo Amalthea)
 
 Overview
 --------
