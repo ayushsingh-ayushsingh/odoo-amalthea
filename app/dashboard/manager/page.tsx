@@ -10,6 +10,7 @@ type Pending = {
     expense: any
     step: any
     submitter: any
+    canAct?: boolean
 }
 
 export default function Page() {
@@ -24,75 +25,73 @@ export default function Page() {
         async function load() {
             setLoading(true)
             try {
-                // Try to get approver id from localStorage; fall back to /api/me
-                let approverId = localStorage.getItem('userId')
-                let companyBaseCurrency = null
-                if (!approverId) {
-                    try {
-                        const meRes = await fetch('/api/me')
-                        if (meRes.ok) {
-                            const meJson = await meRes.json()
-                            approverId = meJson?.id
-                            companyBaseCurrency = meJson?.companyBaseCurrency
-                            setMe(meJson)
-                        }
-                    } catch (e) {
-                        // ignore
+                // Get approver and company info from server
+                let approverId: string | null = null
+                let meJson: any = null
+                try {
+                    const meRes = await fetch('/api/me')
+                    if (meRes.ok) {
+                        meJson = await meRes.json()
+                        approverId = meJson?.id || null
+                        setMe(meJson)
                     }
-                } else {
-                    // also try to populate company currency for display
-                    try {
-                        const meRes = await fetch(`/api/me?userId=${approverId}`)
-                        if (meRes.ok) {
-                            const meJson = await meRes.json()
-                            companyBaseCurrency = meJson?.companyBaseCurrency
-                            setMe(meJson)
-                        }
-                    } catch (e) {
-                        // ignore
-                    }
+                } catch (e) {
+                    // ignore
                 }
+
+                // fallback to localStorage if needed
+                if (!approverId) approverId = localStorage.getItem('userId')
 
                 if (!approverId) {
                     setItems([])
-                    return
-                }
-                // If teamView, fetch team members and their expenses; otherwise, fetch approvals for this approver
-                let res
-                if (teamView) {
-                    // fetch users to build a map for submitter names
-                    let localUsersMap: Record<string, any> = {}
-                    try {
-                        const usersRes = await fetch('/api/users')
-                        if (usersRes.ok) {
-                            const usersJson = await usersRes.json()
-                            usersJson.forEach((u: any) => (localUsersMap[u.id] = u))
-                            setUsersMap(localUsersMap)
-                        }
-                    } catch (e) {
-                        // ignore
-                    }
-                    // use server-side managerId filter
-                    const teamRes = await fetch(`/api/expenses?managerId=${approverId}`)
-                    if (!teamRes.ok) {
-                        setItems([])
-                        setLoading(false)
-                        return
-                    }
-                    const teamJson = await teamRes.json()
-                    // map to Pending[] shape and attach submitter if available
-                    const shaped = teamJson.map((e: any) => ({ expense: e, step: null, submitter: (localUsersMap[e.userId] || null) }))
-                    setItems(shaped)
                     setLoading(false)
                     return
                 }
-                res = await fetch(`/api/approvals?approverId=${approverId}`)
-                if (!res.ok) {
+
+                // Fetch all expenses and narrow to the manager's company
+                const allExpRes = await fetch('/api/expenses')
+                if (!allExpRes.ok) {
                     setItems([])
+                    setLoading(false)
                     return
                 }
-                const json = await res.json()
-                setItems(json || [])
+                const allExpenses = await allExpRes.json()
+                const companyId = meJson?.companyId || null
+                let companyExpenses = Array.isArray(allExpenses) ? allExpenses : []
+                if (companyId) {
+                    companyExpenses = companyExpenses.filter((e: any) => String(e.companyId) === String(companyId))
+                }
+
+                // Fetch approvals this approver can act on to mark actionable rows
+                const approvalsRes = await fetch(`/api/approvals?approverId=${approverId}`)
+                const approvalsJson = approvalsRes.ok ? await approvalsRes.json() : []
+                const actionableIds = new Set((approvalsJson || []).map((r: any) => String(r.expense?.id || r.expenseId || r.id)))
+
+                // Load users to map submitter names
+                const usersMapLocal: Record<string, any> = {}
+                try {
+                    const usersRes = await fetch('/api/users')
+                    if (usersRes.ok) {
+                        const usersJson = await usersRes.json()
+                        usersJson.forEach((u: any) => (usersMapLocal[u.id] = u))
+                        setUsersMap(usersMapLocal)
+                    }
+                } catch (e) {
+                    // ignore
+                }
+
+                // Build items and apply teamView filter if requested
+                const shaped = companyExpenses.map((e: any) => ({
+                    expense: e,
+                    step: null,
+                    submitter: usersMapLocal[e.userId] || null,
+                    canAct: actionableIds.has(String(e.id))
+                })).filter((s: any) => {
+                    if (!teamView) return true
+                    return s.submitter && String(s.submitter.managerId) === String(approverId)
+                })
+
+                setItems(shaped)
             } catch (err) {
                 console.error('Failed to load approvals', err)
                 setItems([])
@@ -120,7 +119,7 @@ export default function Page() {
             const json = await res.json()
             toast.success(json?.message || `${action}`)
             // update local list: remove or mark item as acted upon
-            setItems((prev) => prev.map(it => it.expense.id === expenseId ? ({ ...it, expense: { ...it.expense, status: action } }) : it))
+            setItems((prev) => prev.map(it => it.expense.id === expenseId ? ({ ...it, expense: { ...it.expense, status: action }, canAct: false }) : it))
         } catch (err: any) {
             console.error('Approval error', err)
             toast.error(err?.message || 'Failed to perform action')
@@ -198,9 +197,9 @@ export default function Page() {
                                         <TableCell>
                                             {expense.status === 'Pending' ? (
                                                 <div className="flex items-center gap-2">
-                                                    <Button size="sm" variant="default" disabled={processing === expense.id} onClick={() => performAction(expense.id, 'Approved')}>Approve</Button>
-                                                    <Button size="sm" variant="destructive" disabled={processing === expense.id} onClick={() => performAction(expense.id, 'Rejected')}>Reject</Button>
-                                                    <Button size="sm" variant="outline" disabled={processing === expense.id} onClick={() => escalate(expense.id)}>Escalate</Button>
+                                                    <Button size="sm" variant="default" disabled={processing === expense.id || !items[idx]?.canAct} onClick={() => performAction(expense.id, 'Approved')}>Approve</Button>
+                                                    <Button size="sm" variant="destructive" disabled={processing === expense.id || !items[idx]?.canAct} onClick={() => performAction(expense.id, 'Rejected')}>Reject</Button>
+                                                    <Button size="sm" variant="outline" disabled={processing === expense.id || !items[idx]?.canAct} onClick={() => escalate(expense.id)}>Escalate</Button>
                                                 </div>
                                             ) : (
                                                 <div className="text-sm text-muted-foreground">{expense.status}</div>
