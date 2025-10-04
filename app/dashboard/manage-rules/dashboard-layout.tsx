@@ -17,7 +17,7 @@ export default function Page({ children }: { children: ReactNode }) {
                 } as React.CSSProperties
             }
         >
-            <RoleBasedSidebar />
+        <RoleBasedSidebar />
             <SidebarInset>
                 <SiteHeader />
                 <div className="flex flex-1 flex-col">

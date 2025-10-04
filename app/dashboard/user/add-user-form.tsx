@@ -36,22 +36,54 @@ interface AddUserFormProps {
 
 export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
     const [open, setOpen] = useState(false)
-    const [state, formAction] = useActionState(createUserAction, initialState)
+    // Cast initialState to any to satisfy useActionState typing in this environment
+    const [state, formAction] = useActionState(createUserAction as any, initialState as any)
+    const [managers, setManagers] = useState<any[]>([])
 
     // Handle form submission result
     useEffect(() => {
         if (state.status === 'success') {
             toast.success(state.message)
-            setOpen(false)
+            // Only close if dialog is currently open to avoid unnecessary state churn
+            setOpen((prev) => {
+                if (prev) {
+                    return false
+                }
+                return prev
+            })
+
             // Reset form
             const form = document.getElementById('add-user-form') as HTMLFormElement
-            form?.reset()
+            // reset after a tick to avoid interfering with action state updates
+            setTimeout(() => form?.reset(), 0)
+
             // Trigger table refresh
             onUserAdded?.()
         } else if (state.status === 'error' && state.message) {
             toast.error(state.message)
         }
-    }, [state, onUserAdded])
+    }, [state.status, state.message, onUserAdded])
+
+    // Fetch managers when the dialog opens so user can pick a manager
+    useEffect(() => {
+        if (!open) return
+
+        let mounted = true
+            ; (async () => {
+                try {
+                    const res = await fetch('/api/users?role=Manager')
+                    if (!res.ok) return
+                    const data = await res.json()
+                    if (mounted) setManagers(data || [])
+                } catch (e) {
+                    console.error('Failed to fetch managers', e)
+                }
+            })()
+
+        return () => {
+            mounted = false
+        }
+    }, [open])
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -85,7 +117,7 @@ export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
                             <p className="text-sm text-red-500">{state.errors.name[0]}</p>
                         )}
                     </div>
-                    
+
                     <div className="space-y-2">
                         <Label htmlFor="email">Email</Label>
                         <Input
@@ -99,7 +131,7 @@ export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
                             <p className="text-sm text-red-500">{state.errors.email[0]}</p>
                         )}
                     </div>
-                    
+
                     <div className="space-y-2">
                         <Label htmlFor="password">Password</Label>
                         <Input
@@ -110,10 +142,10 @@ export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
                             required
                         />
                         {state.errors?.password && (
-                            <p className="text-sm text-red-500">{state.errors.password[0]}</p>
+                            <p className="text-sm text-destrctive">{state.errors.password[0]}</p>
                         )}
                     </div>
-                    
+
                     <div className="space-y-2">
                         <Label htmlFor="role">Role</Label>
                         <Select name="role" required>
@@ -121,7 +153,7 @@ export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
                                 <SelectValue placeholder="Select a role" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Admin">Admin</SelectItem>
+                                <SelectItem value="Admin" disabled>Admin</SelectItem>
                                 <SelectItem value="Manager">Manager</SelectItem>
                                 <SelectItem value="Employee">Employee</SelectItem>
                             </SelectContent>
@@ -130,19 +162,25 @@ export default function AddUserForm({ onUserAdded }: AddUserFormProps) {
                             <p className="text-sm text-red-500">{state.errors.role[0]}</p>
                         )}
                     </div>
-                    
+
                     <div className="space-y-2">
                         <Label htmlFor="managerId">Manager (Optional)</Label>
-                        <Input
-                            id="managerId"
-                            name="managerId"
-                            placeholder="Manager ID (leave empty for top-level)"
-                        />
+                        <Select name="managerId">
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select manager (optional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">No Manager</SelectItem>
+                                {managers.map((m) => (
+                                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         {state.errors?.managerId && (
                             <p className="text-sm text-red-500">{state.errors.managerId[0]}</p>
                         )}
                     </div>
-                    
+
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                             Cancel

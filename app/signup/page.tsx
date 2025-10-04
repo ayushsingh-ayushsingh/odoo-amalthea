@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { cn } from "@/lib/utils" // Assuming this path is correct
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"

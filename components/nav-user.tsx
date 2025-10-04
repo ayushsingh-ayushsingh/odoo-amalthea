@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useEffect, useState } from "react"
 import {
   IconCreditCard,
   IconDotsVertical,
@@ -32,13 +33,56 @@ import {
 export function NavUser({
   user,
 }: {
-  user: {
-    name: string
-    email: string
-    avatar: string
+  user?: {
+    name?: string
+    email?: string
+    avatar?: string
   }
 }) {
   const { isMobile } = useSidebar()
+  const [localUser, setLocalUser] = useState<{ name?: string; email?: string; avatar?: string } | null>(user ?? null)
+  const [loading, setLoading] = useState<boolean>(!user)
+
+  useEffect(() => {
+    let mounted = true
+    if (!user) {
+      setLoading(true)
+      fetch('/api/me')
+        .then((r) => r.json())
+        .then((data) => {
+          if (!mounted) return
+          if (data && Object.keys(data).length > 0) {
+            setLocalUser({ name: data.name, email: data.email ?? data.email, avatar: data.avatar ?? data.avatar })
+          } else {
+            setLocalUser({ name: 'Guest', email: '', avatar: '' })
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load current user', err)
+          if (mounted) setLocalUser({ name: 'Guest', email: '', avatar: '' })
+        })
+        .finally(() => { if (mounted) setLoading(false) })
+    }
+
+    return () => { mounted = false }
+  }, [user])
+
+  const u = localUser
+
+  function initials(name?: string) {
+    if (!name) return '?' 
+    return name.split(' ').map(s => s[0]).join('').slice(0,2).toUpperCase()
+  }
+
+  function handleLogout() {
+    try {
+      localStorage.removeItem('userId')
+    } catch (e) {
+      // ignore
+    }
+    // simple reload to reflect logout
+    location.reload()
+  }
 
   return (
     <SidebarMenu>
@@ -49,14 +93,17 @@ export function NavUser({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg grayscale">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+              <Avatar className="h-8 w-8 rounded-full">
+                {u && u.avatar ? (
+                  <AvatarImage src={u.avatar} alt={u.name} />
+                ) : (
+                  <AvatarFallback className="rounded-lg">{initials(u?.name)}</AvatarFallback>
+                )}
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name}</span>
+                <span className="truncate font-medium">{loading ? 'Loading...' : (u?.name ?? 'Guest')}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {user.email}
+                  {loading ? '' : (u?.email ?? '')}
                 </span>
               </div>
               <IconDotsVertical className="ml-auto size-4" />
@@ -70,35 +117,23 @@ export function NavUser({
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <Avatar className="h-8 w-8 rounded-full">
+                  {u && u.avatar ? (
+                    <AvatarImage src={u.avatar} alt={u.name} />
+                  ) : (
+                    <AvatarFallback className="rounded-lg">{initials(u?.name)}</AvatarFallback>
+                  )}
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name}</span>
+                  <span className="truncate font-medium">{u?.name ?? 'Guest'}</span>
                   <span className="text-muted-foreground truncate text-xs">
-                    {user.email}
+                    {u?.email ?? ''}
                   </span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <IconUserCircle />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconCreditCard />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconNotification />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleLogout}>
               <IconLogout />
               Log out
             </DropdownMenuItem>

@@ -11,9 +11,7 @@ const createUserSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters."),
     email: z.string().email("Invalid email address."),
     password: z.string().min(8, "Password must be at least 8 characters."), 
-    role: z.enum(["Admin", "Manager", "Employee"], {
-        required_error: "Role is required.",
-    }),
+    role: z.enum(["Admin", "Manager", "Employee"] as const),
     managerId: z.string().optional().nullable(),
 });
 
@@ -23,7 +21,8 @@ type CreateUserInputs = z.infer<typeof createUserSchema>;
 type ActionResponse = { 
     status: 'success' | 'error'; 
     message: string; 
-    errors?: Record<keyof CreateUserInputs, string[]>;
+    // allow partial errors so callers can return only the relevant field errors
+    errors?: Partial<Record<keyof CreateUserInputs, string[]>>;
 };
 
 // Helper function to get or create a default company
@@ -68,12 +67,16 @@ export async function createUserAction(
     //     return { status: 'error', message: 'Unauthorized: Must be an Admin to create users.' };
     // }
     
+    // Translate form data; treat special "none" value as null for managerId
+    const rawManagerId = formData.get('managerId')
+    const managerIdValue = rawManagerId === 'none' ? null : rawManagerId
+
     const inputs = {
         name: formData.get('name'),
         email: formData.get('email'),
         password: formData.get('password'),
         role: formData.get('role'),
-        managerId: formData.get('managerId') || null,
+        managerId: managerIdValue || null,
     };
     
     // Validation
@@ -83,7 +86,7 @@ export async function createUserAction(
         return {
             status: 'error',
             message: 'Validation failed. Check the fields for errors.',
-            errors: validatedFields.error.flatten().fieldErrors as Record<keyof CreateUserInputs, string[]>
+            errors: validatedFields.error.flatten().fieldErrors as Partial<Record<keyof CreateUserInputs, string[]>>
         };
     }
     

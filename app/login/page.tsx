@@ -21,7 +21,7 @@ import {
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { loginAction } from "./login-action";
+// server action removed in favor of a client API call
 
 const formSchema = z.object({
     email: z.string().email("Invalid email address"),
@@ -65,38 +65,32 @@ export function LoginFormPage({
         setIsLoading(true);
         setFormState({ status: 'idle', message: '' });
 
-        // Convert form values to FormData for the server action
-        const formData = new FormData();
-        formData.append('email', values.email);
-        formData.append('password', values.password);
-
         try {
-            const result = await loginAction(formState, formData);
-            setFormState({ status: result.status, message: result.message });
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(values),
+            });
 
-            if (result.status === 'success') {
+            const result = await res.json();
+            setFormState({ status: result.status ?? 'error', message: result.message ?? '' });
+
+            if (res.ok && result.status === 'success') {
                 toast.success(result.message);
-                // Redirect to dashboard upon successful login
-                router.push("/dashboard");
-            } else {
-                toast.error(result.message);
-
-                // Set field-specific errors if returned (e.g., if the action returns 'email' or 'password' error)
-                if (result.errors) {
-                    Object.entries(result.errors).forEach(([key, messages]) => {
-                        // Ensure key is valid before setting error
-                        if (key === 'email' || key === 'password') {
-                            form.setError(key as keyof LoginFormValues, {
-                                type: 'server',
-                                message: messages[0],
-                            });
-                        }
-                    });
+                if (result.userId) {
+                    try {
+                        localStorage.setItem('userId', result.userId);
+                    } catch (e) {
+                        // ignore
+                    }
                 }
+                router.push('/dashboard');
+            } else {
+                toast.error(result.message || 'Login failed');
             }
         } catch (error) {
-            console.error("Client side error during login:", error);
-            toast.error("An unexpected error occurred. Please check your network.");
+            console.error('Client side error during login:', error);
+            toast.error('An unexpected error occurred. Please check your network.');
         } finally {
             setIsLoading(false);
         }

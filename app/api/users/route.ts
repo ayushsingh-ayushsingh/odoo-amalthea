@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUsersAction, deleteUsersAction } from '@/app/dashboard/user/user-actions';
 
-// GET /api/users - Fetch all users
-export async function GET() {
+// GET /api/users - Fetch all users. Supports optional ?role=Manager to filter by role.
+export async function GET(request: NextRequest) {
     try {
-        const users = await getUsersAction();
-        return NextResponse.json(users);
+        const url = new URL(request.url)
+        const role = url.searchParams.get('role')
+
+        let users = await getUsersAction()
+
+        if (role) {
+            users = users.filter((u: any) => u.role === role)
+        }
+
+        return NextResponse.json(users)
     } catch (error) {
-        console.error('Error fetching users:', error);
+        console.error('Error fetching users:', error)
         // Return empty array instead of error to prevent frontend crash
-        return NextResponse.json([]);
+        return NextResponse.json([])
     }
 }
 
@@ -17,7 +25,7 @@ export async function GET() {
 export async function DELETE(request: NextRequest) {
     try {
         const { userIds } = await request.json();
-        
+
         if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
             return NextResponse.json(
                 { error: 'No user IDs provided' },

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useId, useMemo, useRef, useState } from "react"
+import EditUserForm from "./edit-user-form"
 import {
     ColumnDef,
     ColumnFiltersState,
@@ -94,16 +95,7 @@ import {
     TableRow,
 } from "@/components/ui/table"
 
-// Define the new User type
-type User = {
-    id: string;
-    name: string;
-    email: string;
-    role: "Admin" | "Manager" | "Employee";
-    managerId: string | null; // ID of the user's manager
-    managerName?: string | null; // We will populate this from the database
-    createdAt: Date;
-};
+import { User } from "./types";
 
 // Custom filter function for multi-column searching
 const multiColumnFilterFn: FilterFn<User> = (row, columnId, filterValue) => {
@@ -220,7 +212,7 @@ export default function DataTableComponent() {
                     className={cn(
                         // Style badges based on role
                         row.getValue("role") === "Admin" && "bg-primary hover:bg-primary/90 text-primary-foreground",
-                        row.getValue("role") === "Manager" && "bg-secondary hover:bg-secondary/90 text-primary-foreground"
+                        row.getValue("role") === "Manager" && "bg-secondary-foreground hover:bg-secondary/90 text-primary-foreground"
                     )}
                 >
                     {row.getValue("role")}
@@ -739,6 +731,33 @@ export default function DataTableComponent() {
 }
 
 function RowActions({ row, onUserDeleted }: { row: Row<User>; onUserDeleted?: () => void }) {
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [managers, setManagers] = useState<User[]>([])
+
+    // Fetch managers when edit dialog is opened
+    useEffect(() => {
+        if (isEditDialogOpen) {
+            const fetchManagers = async () => {
+                try {
+                    const res = await fetch('/api/users?role=Manager', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    })
+                    if (res.ok) {
+                        const data = await res.json()
+                        setManagers(data)
+                    }
+                } catch (error) {
+                    console.error('Error fetching managers:', error)
+                    toast.error('Failed to load managers')
+                }
+            }
+            fetchManagers()
+        }
+    }, [isEditDialogOpen])
+
     const handleDeleteUser = async () => {
         try {
             const res = await fetch('/api/users', {
@@ -764,35 +783,42 @@ function RowActions({ row, onUserDeleted }: { row: Row<User>; onUserDeleted?: ()
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <div className="flex justify-end">
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        className="shadow-none"
-                        aria-label="Actions"
-                    >
-                        <EllipsisIcon size={16} aria-hidden="true" />
-                    </Button>
-                </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
+        <>
+            <EditUserForm
+                user={row.original}
+                managers={managers}
+                open={isEditDialogOpen}
+                onOpenChange={setIsEditDialogOpen}
+                onUserUpdated={onUserDeleted ?? (() => { })}
+            />
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <div className="flex justify-end">
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="shadow-none"
+                            aria-label="Actions"
+                        >
+                            <EllipsisIcon size={16} aria-hidden="true" />
+                        </Button>
+                    </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuGroup>
+                        <DropdownMenuItem onClick={() => setIsEditDialogOpen(true)}>
+                            <span>Edit User</span>
+                        </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
-                        onClick={() => console.log('Open Edit Modal for User:', row.original.id)}
+                        className="text-destructive focus:text-destructive"
+                        onClick={handleDeleteUser}
                     >
-                        <span>Edit User</span>
+                        <span>Delete User</span>
                     </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={handleDeleteUser}
-                >
-                    <span>Delete User</span>
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </>
     )
 }
